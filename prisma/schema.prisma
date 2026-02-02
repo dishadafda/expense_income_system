@@ -1,0 +1,155 @@
+// Prisma schema for Expense & Income Management System
+// Mirrors the provided MySQL table structures and column names.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model users {
+  UserID       Int      @id @default(autoincrement())
+  UserName     String   @db.VarChar(250)
+  EmailAddress String   @db.VarChar(500)
+  Password     String   @db.VarChar(50)
+  MobileNo     String   @db.VarChar(50)
+  ProfileImage String?  @db.VarChar(500)
+  Created      DateTime @default(now()) @db.Timestamp(0)
+  Modified     DateTime @updatedAt @db.Timestamp(0)
+
+  // Relations
+  peoples        peoples[]        @relation("UserPeoples")
+  categories     categories[]     @relation("UserCategories")
+  projects       projects[]       @relation("UserProjects")
+  sub_categories sub_categories[] @relation("UserSubCategories")
+  expenses       expenses[]       @relation("UserExpenses")
+  incomes        incomes[]        @relation("UserIncomes")
+}
+
+model peoples {
+  PeopleID    Int      @id @default(autoincrement())
+  PeopleCode  String?  @db.VarChar(50)
+  Password    String   @db.VarChar(50)
+  PeopleName  String   @db.VarChar(250)
+  Email       String   @db.VarChar(150)
+  MobileNo    String   @db.VarChar(50)
+  Description String?  @db.VarChar(500)
+  UserID      Int
+  Created     DateTime @default(now()) @db.Timestamp(0)
+  Modified    DateTime @updatedAt @db.Timestamp(0)
+  IsActive    Boolean? @default(true) @db.Bit(1)
+
+  // Relations
+  users    users      @relation(name: "UserPeoples", fields: [UserID], references: [UserID])
+  expenses expenses[]
+  incomes  incomes[]
+}
+
+model categories {
+  CategoryID   Int      @id @default(autoincrement())
+  CategoryName String   @db.VarChar(250)
+  LogoPath     String?  @db.VarChar(250)
+  IsExpense    Boolean  @db.Bit(1)
+  IsIncome     Boolean  @db.Bit(1)
+  IsActive     Boolean  @default(true) @db.Bit(1)
+  Description  String?  @db.VarChar(500)
+  UserID       Int
+  Created      DateTime @default(now()) @db.Timestamp(0)
+  Modified     DateTime @updatedAt @db.Timestamp(0)
+  Sequence     Decimal? @db.Decimal(10, 2)
+
+  // Relations
+  users          users            @relation(name: "UserCategories", fields: [UserID], references: [UserID])
+  sub_categories sub_categories[]
+  expenses       expenses[]
+  incomes        incomes[]
+}
+
+model projects {
+  ProjectID        Int       @id @default(autoincrement())
+  ProjectName      String    @db.VarChar(250)
+  ProjectLogo      String?   @db.VarChar(250)
+  ProjectStartDate DateTime?
+  ProjectEndDate   DateTime?
+  ProjectDetail    String?   @db.VarChar(500)
+  Description      String?   @db.VarChar(500)
+  UserID           Int
+  Created          DateTime  @default(now()) @db.Timestamp(0)
+  Modified         DateTime  @updatedAt @db.Timestamp(0)
+  IsActive         Boolean?  @default(true) @db.Bit(1)
+
+  // Relations
+  users    users      @relation(name: "UserProjects", fields: [UserID], references: [UserID])
+  expenses expenses[]
+  incomes  incomes[]
+}
+
+model sub_categories {
+  SubCategoryID   Int      @id @default(autoincrement())
+  CategoryID      Int
+  SubCategoryName String   @db.VarChar(250)
+  LogoPath        String?  @db.VarChar(250)
+  IsExpense       Boolean  @db.Bit(1)
+  IsIncome        Boolean  @db.Bit(1)
+  IsActive        Boolean  @default(true) @db.Bit(1)
+  Description     String?  @db.VarChar(500)
+  UserID          Int
+  Created         DateTime @default(now()) @db.Timestamp(0)
+  Modified        DateTime @updatedAt @db.Timestamp(0)
+  Sequence        Decimal? @db.Decimal(10, 2)
+
+  // Relations
+  categories categories @relation(fields: [CategoryID], references: [CategoryID])
+  users      users      @relation(name: "UserSubCategories", fields: [UserID], references: [UserID])
+  expenses   expenses[]
+  incomes    incomes[]
+}
+
+model expenses {
+  ExpenseID      Int      @id @default(autoincrement())
+  ExpenseDate    DateTime
+  CategoryID     Int?
+  SubCategoryID  Int?
+  PeopleID       Int
+  ProjectID      Int?
+  Amount         Decimal  @db.Decimal(18, 2)
+  ExpenseDetail  String?  @db.VarChar(500)
+  AttachmentPath String?  @db.VarChar(250)
+  Description    String?  @db.VarChar(500)
+  UserID         Int
+  Created        DateTime @default(now()) @db.Timestamp(0)
+  Modified       DateTime @updatedAt @db.Timestamp(0)
+
+  // Relations
+  categories     categories?     @relation(fields: [CategoryID], references: [CategoryID])
+  sub_categories sub_categories? @relation(fields: [SubCategoryID], references: [SubCategoryID])
+  peoples        peoples         @relation(fields: [PeopleID], references: [PeopleID])
+  projects       projects?       @relation(fields: [ProjectID], references: [ProjectID])
+  users          users           @relation(name: "UserExpenses", fields: [UserID], references: [UserID])
+}
+
+model incomes {
+  IncomeID       Int      @id @default(autoincrement())
+  IncomeDate     DateTime
+  CategoryID     Int?
+  SubCategoryID  Int?
+  PeopleID       Int
+  ProjectID      Int?
+  Amount         Decimal  @db.Decimal(18, 2)
+  IncomeDetail   String?  @db.VarChar(500)
+  AttachmentPath String?  @db.VarChar(250)
+  Description    String?  @db.VarChar(500)
+  UserID         Int
+  Created        DateTime @default(now()) @db.Timestamp(0)
+  Modified       DateTime @updatedAt @db.Timestamp(0)
+
+  // Relations
+  categories     categories?     @relation(fields: [CategoryID], references: [CategoryID])
+  sub_categories sub_categories? @relation(fields: [SubCategoryID], references: [SubCategoryID])
+  peoples        peoples         @relation(fields: [PeopleID], references: [PeopleID])
+  projects       projects?       @relation(fields: [ProjectID], references: [ProjectID])
+  users          users           @relation(name: "UserIncomes", fields: [UserID], references: [UserID])
+}
