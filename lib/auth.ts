@@ -15,6 +15,7 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: "Email", type: "text" },
         password: { label: "Password", type: "password" },
+        loginType: { label: "Login Type", type: "text" }, // "admin" or "user"
       },
       authorize: async (credentials) => {
         if (!credentials?.email || !credentials?.password) {
@@ -27,21 +28,16 @@ export const authOptions: NextAuthOptions = {
           },
         });
 
-        if (!user) {
+        if (!user || user.Password !== credentials.password) {
           return null;
         }
 
-        // NOTE: Passwords are stored as plain text in the provided schema (VARCHAR(50)).
-        // This compares directly; if you later move to hashing, update this comparison.
-        if (user.Password !== credentials.password) {
-          return null;
-        }
-
-        // Simple role rule:
-        // Treat the "admin" username as Admin, everything else as Normal User.
-        // Adjust this logic to match your actual role rules from the docs.
-        // In lib/auth.ts, update the authorize function:
+        // Logic: Admin if email is admin@company.com
         const role: AppRole = user.EmailAddress.toLowerCase() === "admin@company.com" ? "ADMIN" : "USER";
+
+        // Optional: Reject if loginType doesn't match actual role to enforce the UI tabs
+        if (credentials.loginType === "admin" && role !== "ADMIN") return null;
+        if (credentials.loginType === "user" && role !== "USER") return null;
 
         return {
           id: String(user.UserID),
@@ -79,4 +75,3 @@ export const authOptions: NextAuthOptions = {
 export function getServerAuthSession() {
   return getServerSession(authOptions);
 }
-

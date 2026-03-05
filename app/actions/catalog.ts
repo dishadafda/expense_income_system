@@ -2,39 +2,53 @@
 
 import { prisma } from "@/lib/prisma";
 
-export async function getCategories() {
-  const categories = await prisma.categories.findMany({
-    where: { IsActive: true },
+export async function getCategories(role: "ADMIN" | "USER", userId: number, filterUserId?: number) {
+  const where = role === "ADMIN" ? (filterUserId ? { UserID: filterUserId } : {}) : { UserID: userId };
+  return await prisma.categories.findMany({
+    where,
     orderBy: [{ Sequence: "asc" }, { CategoryName: "asc" }],
   });
-
-  return categories;
 }
 
-export async function getProjects() {
-  const projects = await prisma.projects.findMany({
-    where: { IsActive: true },
-    orderBy: [{ ProjectName: "asc" }],
-  });
-
-  return projects;
-}
-
-export async function getSubCategories() {
-  const subCategories = await prisma.sub_categories.findMany({
-    where: { IsActive: true },
+export async function getSubCategories(role: "ADMIN" | "USER", userId: number, filterUserId?: number) {
+  const where = role === "ADMIN" ? (filterUserId ? { UserID: filterUserId } : {}) : { UserID: userId };
+  return await prisma.sub_categories.findMany({
+    where,
+    include: { categories: true },
     orderBy: [{ Sequence: "asc" }, { SubCategoryName: "asc" }],
   });
-
-  return subCategories;
 }
 
-export async function getPeople() {
-  const people = await prisma.peoples.findMany({
-    where: { IsActive: true },
+export async function getProjects(role: "ADMIN" | "USER") {
+  const where = role === "ADMIN" ? {} : { IsActive: true };
+  return await prisma.projects.findMany({
+    where,
+    orderBy: [{ ProjectName: "asc" }],
+  });
+}
+
+export async function getPeople(role: "ADMIN" | "USER", userId: number) {
+  const where = role === "ADMIN" ? {} : { UserID: userId };
+  return await prisma.peoples.findMany({
+    where,
     orderBy: [{ PeopleName: "asc" }],
   });
-
-  return people;
 }
 
+export async function getAllIncomes(role: "ADMIN" | "USER", userId: number) {
+  const where = role === "ADMIN" ? {} : { UserID: userId };
+  return await prisma.incomes.findMany({
+    where,
+    include: { categories: true, sub_categories: true, projects: true, peoples: true },
+    orderBy: { IncomeDate: "desc" },
+  });
+}
+
+export async function getAllExpenses(role: "ADMIN" | "USER", userId: number, filterUserId?: number) {
+  const where = role === "ADMIN" ? (filterUserId ? { UserID: filterUserId } : {}) : { UserID: userId };
+  return await prisma.expenses.findMany({
+    where,
+    include: { categories: true, sub_categories: true, projects: true, peoples: true },
+    orderBy: { ExpenseDate: "desc" },
+  });
+}

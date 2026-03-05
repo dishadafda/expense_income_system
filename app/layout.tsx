@@ -2,52 +2,57 @@ import type { Metadata } from "next";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./globals.css";
 import Link from "next/link";
+import Image from "next/image";
 
 export const metadata: Metadata = {
-  title: "Expense & Income Manager",
-  description: "Track expenses and incomes with role-based access",
+  title: "WealthWise | Expense Manager",
+  description: "Track expenses and incomes with style",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body>
         <div className="d-flex min-vh-100">
-          <aside className="bg-dark text-white p-3" style={{ width: "260px" }}>
-            <div className="mb-4">
-              <h4 className="h5 mb-0">Expense Manager</h4>
-              <small className="text-muted">Dashboard</small>
+          <aside className="bg-dark text-white p-4 d-flex flex-column" style={{ width: "260px" }}>
+            
+            {/* Logo Section */}
+            <div className="mb-5 d-flex align-items-center gap-3">
+              <div 
+                className="bg-white rounded-circle d-flex align-items-center justify-content-center shadow-sm" 
+                style={{ width: '48px', height: '48px', overflow: 'hidden', padding: '6px' }}
+              >
+                <Image 
+                  src="/logo.jpg" 
+                  alt="WealthWise Logo" 
+                  width={40} 
+                  height={40} 
+                  style={{ objectFit: 'contain' }}
+                  priority
+                />
+              </div>
+              <h4 className="h5 mb-0 fw-bold">CashTracker</h4>
             </div>
-            <nav className="nav flex-column gap-1">
-              <Link href="/dashboard" className="nav-link text-white">
-                Dashboard
-              </Link>
-              <Link href="/expenses" className="nav-link text-white">
-                Expenses
-              </Link>
-              <Link href="/incomes" className="nav-link text-white">
-                Incomes
-              </Link>
-              <Link href="/categories" className="nav-link text-white">
-                Categories
-              </Link>
-              <Link href="/sub-categories" className="nav-link text-white">
-                Sub-Categories
-              </Link>
-              <Link href="/projects" className="nav-link text-white">
-                Projects
-              </Link>
-              <Link href="/people" className="nav-link text-white">
-                People
-              </Link>
+          
+            <nav className="nav flex-column gap-2">
+              {[
+                { name: "Dashboard", href: "/dashboard" },
+                { name: "Expenses", href: "/expenses" },
+                { name: "Incomes", href: "/incomes" },
+                { name: "Categories", href: "/categories" },
+                { name: "Sub-Categories", href: "/sub-categories" },
+                { name: "Projects", href: "/projects" },
+                { name: "People", href: "/people" },
+              ].map((item) => (
+                <Link key={item.href} href={item.href} className="nav-link text-white px-3 py-2">
+                  {item.name}
+                </Link>
+              ))}
             </nav>
           </aside>
-          <main className="flex-grow-1 bg-light">
-            <div className="container-fluid py-4">{children}</div>
+          
+          <main className="flex-grow-1 overflow-auto">
+            <div className="container-fluid p-5">{children}</div>
           </main>
         </div>
       </body>
