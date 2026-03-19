@@ -38,6 +38,7 @@ export async function toggleProjectActive(id: number, isActive: boolean) {
 }
 
 export async function updateProject(id: number, formData: FormData) {
+  await requireAdmin();
   const name = String(formData.get("name") || "").trim();
   const startDateStr = String(formData.get("startDate") || "");
   const endDateStr = String(formData.get("endDate") || "");

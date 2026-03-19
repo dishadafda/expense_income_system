@@ -1,12 +1,26 @@
 import { getProjects } from "@/app/actions/catalog";
-import { createProject, deleteProject, toggleProjectActive } from "@/app/actions/projects";
+import { createProject, deleteProject, toggleProjectActive, updateProject } from "@/app/actions/projects";
 import { getServerAuthSession } from "@/lib/auth";
+import Link from "next/link";
 
-export default async function ProjectsPage() {
+export default async function ProjectsPage(props: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const searchParams = await props.searchParams;
   const session = await getServerAuthSession();
   const role = (session?.user as any)?.role as "ADMIN" | "USER";
+  const parentUserId = Number((session?.user as any)?.parentUserId || (session?.user as any)?.userId || 0);
   const isAdmin = role === "ADMIN";
-  const projects = await getProjects(role);
+  const projects = await getProjects(role, parentUserId);
+
+  const editId = searchParams?.edit ? Number(searchParams.edit) : null;
+  const editingProject = editId ? projects.find((p) => p.ProjectID === editId) : null;
+
+  // Formatting dates for input type="date"
+  const formatDateForInput = (dateString?: Date | null) => {
+    if (!dateString) return "";
+    return new Date(dateString).toISOString().split('T')[0];
+  };
 
   async function handleCreate(formData: FormData) {
     "use server";
@@ -20,14 +34,33 @@ export default async function ProjectsPage() {
       {isAdmin && (
         <div className="card shadow-sm mb-4">
           <div className="card-body">
-            <h2 className="h6 mb-3">Add Project</h2>
-            <form action={handleCreate} className="row g-3">
-              <div className="col-md-3">
+            <h2 className="h6 mb-3">{editingProject ? "Edit Project" : "Add Project"}</h2>
+            <form action={editingProject ? updateProject.bind(null, editingProject.ProjectID) : handleCreate} className="row g-3">
+              <div className="col-md-4">
                 <label className="form-label">Project Name *</label>
-                <input name="name" className="form-control" required />
+                <input name="name" className="form-control" required defaultValue={editingProject?.ProjectName || ""} />
               </div>
-              <div className="col-12 d-flex justify-content-end">
-                <button type="submit" className="btn btn-primary">Save Project</button>
+              <div className="col-md-4">
+                <label className="form-label">Start Date</label>
+                <input type="date" name="startDate" className="form-control" defaultValue={formatDateForInput(editingProject?.ProjectStartDate)} />
+              </div>
+              <div className="col-md-4">
+                <label className="form-label">End Date</label>
+                <input type="date" name="endDate" className="form-control" defaultValue={formatDateForInput(editingProject?.ProjectEndDate)} />
+              </div>
+              <div className="col-md-6">
+                <label className="form-label">Detail</label>
+                <input name="detail" className="form-control" defaultValue={editingProject?.ProjectDetail || ""} />
+              </div>
+              <div className="col-md-6">
+                <label className="form-label">Description</label>
+                <input name="description" className="form-control" defaultValue={editingProject?.Description || ""} />
+              </div>
+              <div className="col-12 d-flex justify-content-end gap-2">
+                {editingProject && (
+                  <Link href="/projects" className="btn btn-secondary">Cancel</Link>
+                )}
+                <button type="submit" className="btn btn-primary">{editingProject ? "Update Project" : "Save Project"}</button>
               </div>
             </form>
           </div>
@@ -56,6 +89,7 @@ export default async function ProjectsPage() {
                   {isAdmin && (
                     <td>
                       <div className="d-flex gap-2">
+                        <Link href={`/projects?edit=${p.ProjectID}`} className="btn btn-sm btn-outline-primary">Edit</Link>
                         <form action={async () => { "use server"; await toggleProjectActive(p.ProjectID, !p.IsActive); }}>
                           <button type="submit" className={`btn btn-sm ${p.IsActive ? "btn-outline-warning" : "btn-outline-success"}`}>
                             {p.IsActive ? "Deactivate" : "Activate"}

@@ -22,47 +22,72 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const user = await prisma.users.findFirst({
-          where: {
-            EmailAddress: credentials.email,
-          },
-        });
+        const loginType = credentials.loginType as string | undefined;
 
-        if (!user || user.Password !== credentials.password) {
-          return null;
+        // Admin login: query users table
+        if (loginType === "admin") {
+          const admin = await prisma.users.findFirst({
+            where: { EmailAddress: credentials.email },
+          });
+
+          if (!admin || admin.Password !== credentials.password) {
+            return null;
+          }
+
+          return {
+            id: String(admin.UserID),
+            name: admin.UserName,
+            email: admin.EmailAddress,
+            role: "ADMIN" as AppRole,
+            userId: admin.UserID,
+            peopleId: admin.UserID,
+            parentUserId: admin.UserID,
+          };
         }
 
-        // Logic: Admin if email is admin@company.com
-        const role: AppRole = user.EmailAddress.toLowerCase() === "admin@company.com" ? "ADMIN" : "USER";
+        // User/Employee login: query peoples table
+        if (loginType === "user") {
+          const person = await prisma.peoples.findFirst({
+            where: { Email: credentials.email, IsActive: true },
+          });
 
-        // Optional: Reject if loginType doesn't match actual role to enforce the UI tabs
-        if (credentials.loginType === "admin" && role !== "ADMIN") return null;
-        if (credentials.loginType === "user" && role !== "USER") return null;
+          if (!person || person.Password !== credentials.password) {
+            return null;
+          }
 
-        return {
-          id: String(user.UserID),
-          name: user.UserName,
-          email: user.EmailAddress,
-          role,
-        };
+          return {
+            id: String(person.PeopleID),
+            name: person.PeopleName,
+            email: person.Email,
+            role: "USER" as AppRole,
+            userId: person.PeopleID,
+            peopleId: person.PeopleID,
+            parentUserId: person.UserID,
+          };
+        }
+
+        return null;
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.userId = user.id;
-        // @ts-expect-error custom role
-        token.role = user.role;
+        const u = user as any;
+        token.userId = u.userId ?? u.id;
+        token.role = u.role;
+        token.peopleId = u.peopleId ?? u.userId ?? u.id;
+        token.parentUserId = u.parentUserId ?? u.userId ?? u.id;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sUser = session.user as any;
         sUser.userId = token.userId;
         sUser.role = token.role as AppRole;
+        sUser.peopleId = (token as any).peopleId;
+        sUser.parentUserId = (token as any).parentUserId;
       }
       return session;
     },

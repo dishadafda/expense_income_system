@@ -3,55 +3,43 @@ import {
   getProjects,
   getSubCategories,
   getPeople,
+  getAllIncomes,
 } from "@/app/actions/catalog";
 import { deleteIncome, updateIncome } from "@/app/actions/incomes";
-import { prisma } from "@/lib/prisma";
 import { getServerAuthSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
+import { uploadFile } from "@/lib/upload";
+import ExportButtons from "@/app/components/ExportButtons";
 
-export default async function IncomesPage({
-  searchParams,
-}: {
-  searchParams: { categoryId?: string; projectId?: string; editId?: string };
+export default async function IncomesPage(props: {
+  searchParams: Promise<{ categoryId?: string; projectId?: string; editId?: string }> | { categoryId?: string; projectId?: string; editId?: string };
 }) {
+  const searchParams = await props.searchParams;
   const session = await getServerAuthSession();
-  const userId = Number((session?.user as any)?.userId || 0);
   const role = (session?.user as any)?.role as "ADMIN" | "USER" | undefined;
+  const peopleId = Number((session?.user as any)?.peopleId || 0);
+  const parentUserId = Number((session?.user as any)?.parentUserId || (session?.user as any)?.userId || 0);
   const isAdmin = role === "ADMIN";
 
-  if (!userId) {
+  if (!role || (!isAdmin && (!peopleId || !parentUserId))) {
     return <div className="alert alert-danger">Not authorized.</div>;
-  }
-
-  // Build where clause
-  const whereClause: any = {};
-  if (!isAdmin) {
-    whereClause.UserID = userId;
-  }
-  if (searchParams.categoryId) {
-    whereClause.CategoryID = Number(searchParams.categoryId);
-  }
-  if (searchParams.projectId) {
-    whereClause.ProjectID = Number(searchParams.projectId);
   }
 
   const [categories, subCategories, projects, people, incomes] =
     await Promise.all([
-      getCategories(),
-      getSubCategories(),
-      getProjects(),
-      getPeople(),
-      prisma.incomes.findMany({
-        where: whereClause,
-        include: {
-          categories: true,
-          sub_categories: true,
-          projects: true,
-          peoples: true,
-        },
-        orderBy: { IncomeDate: "desc" },
-        take: 50,
-      }),
+      getCategories(role, parentUserId),
+      getSubCategories(role, parentUserId),
+      getProjects(role, parentUserId),
+      getPeople(role, parentUserId),
+      getAllIncomes(
+        role,
+        peopleId,
+        parentUserId,
+        undefined,
+        searchParams.categoryId ? Number(searchParams.categoryId) : undefined,
+        searchParams.projectId ? Number(searchParams.projectId) : undefined
+      ),
     ]);
 
   const incomeCategories = categories.filter((c) => c.IsIncome);
@@ -61,6 +49,17 @@ export default async function IncomesPage({
   const editItem = searchParams.editId 
     ? incomes.find(i => i.IncomeID === Number(searchParams.editId)) 
     : null;
+
+  const exportData = incomes.map(i => ({
+    "Date": i.IncomeDate.toISOString().slice(0, 10),
+    "Category": i.categories?.CategoryName || "-",
+    "Sub Category": i.sub_categories?.SubCategoryName || "-",
+    ...(isAdmin ? { "People": i.peoples?.PeopleName || "-" } : {}),
+    "Project": i.projects?.ProjectName || "-",
+    "Amount": Number(i.Amount).toFixed(2),
+    "Detail": i.IncomeDetail || "-",
+    "Description": i.Description || "-"
+  }));
 
   async function addIncome(formData: FormData) {
     "use server";
@@ -73,6 +72,12 @@ export default async function IncomesPage({
     const peopleIdStr = String(formData.get("peopleId") || "");
     
     if (!dateStr || !amountStr || !peopleIdStr) return;
+
+    const file = formData.get("attachment") as File | null;
+    let attachmentPath = null;
+    if (file && file.size > 0) {
+      attachmentPath = await uploadFile(file);
+    }
 
     const selectedPeopleId = Number(peopleIdStr);
     const selectedPeople = await prisma.peoples.findUnique({
@@ -88,8 +93,9 @@ export default async function IncomesPage({
         PeopleID: selectedPeopleId,
         ProjectID: Number(formData.get("projectId")) || null,
         IncomeDetail: String(formData.get("detail")).trim() || null,
+        AttachmentPath: attachmentPath,
         Description: String(formData.get("description")).trim() || null,
-        UserID: selectedPeople?.UserID || userId,
+        UserID: selectedPeople?.UserID || parentUserId,
       },
     });
 
@@ -131,7 +137,7 @@ export default async function IncomesPage({
                   type="number" 
                   step="0.01" 
                   className="form-control" 
-                  defaultValue={editItem ? Number(editItem.Amount) : ""}
+                  defaultValue={editItem ? Number(editItem.Amount).toString() : ""}
                   required 
                 />
               </div>
@@ -153,9 +159,43 @@ export default async function IncomesPage({
                   ))}
                 </select>
               </div>
+              <div className="col-md-3">
+                <label className="form-label">Sub Category</label>
+                <select name="subCategoryId" className="form-select" defaultValue={editItem?.SubCategoryID || ""}>
+                  <option value="">Select</option>
+                  {incomeSubCategories.map((s) => (
+                    <option key={s.SubCategoryID} value={s.SubCategoryID}>{s.SubCategoryName}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-md-3">
+                <label className="form-label">Project</label>
+                <select name="projectId" className="form-select" defaultValue={editItem?.ProjectID || ""}>
+                  <option value="">Select</option>
+                  {projects.map((p) => (
+                    <option key={p.ProjectID} value={p.ProjectID}>{p.ProjectName}</option>
+                  ))}
+                </select>
+              </div>
               <div className="col-md-6">
                 <label className="form-label">Detail</label>
                 <input name="detail" className="form-control" defaultValue={editItem?.IncomeDetail || ""} />
+              </div>
+              <div className="col-md-6">
+                <label className="form-label">Description</label>
+                <input name="description" className="form-control" defaultValue={editItem?.Description || ""} />
+              </div>
+              <div className="col-md-12">
+                <label className="form-label" htmlFor="attachment">
+                  Receipt / Bill (Optional) {editItem?.AttachmentPath && <a href={editItem.AttachmentPath} target="_blank" className="ms-2 text-primary fs-6">View Current</a>}
+                </label>
+                <input
+                  id="attachment"
+                  name="attachment"
+                  type="file"
+                  className="form-control"
+                  accept="image/*,.pdf"
+                />
               </div>
               <div className="col-md-6 d-flex align-items-end justify-content-end gap-2">
                 {editItem && (
@@ -172,7 +212,10 @@ export default async function IncomesPage({
 
       <div className="card shadow-sm">
         <div className="card-body">
-          <h2 className="h6 mb-3">Recent Incomes</h2>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h2 className="h6 mb-0">Recent Incomes</h2>
+            <ExportButtons data={exportData} filename="Incomes_Report" />
+          </div>
           <table className="table table-striped table-hover mb-0">
             <thead>
               <tr>
@@ -180,6 +223,7 @@ export default async function IncomesPage({
                 <th>Category</th>
                 {isAdmin && <th>People</th>}
                 <th>Project</th>
+                <th className="text-center">Receipt</th>
                 <th className="text-end">Amount</th>
                 {isAdmin && <th className="text-center">Actions</th>}
               </tr>
@@ -191,6 +235,13 @@ export default async function IncomesPage({
                   <td>{i.categories?.CategoryName || "-"}</td>
                   {isAdmin && <td>{i.peoples?.PeopleName || "-"}</td>}
                   <td>{i.projects?.ProjectName || "-"}</td>
+                  <td className="text-center">
+                    {i.AttachmentPath ? (
+                      <a href={i.AttachmentPath} target="_blank" className="text-decoration-none">
+                        📎 View
+                      </a>
+                    ) : "-"}
+                  </td>
                   <td className="text-end">₹ {Number(i.Amount).toFixed(2)}</td>
                   {isAdmin && (
                     <td className="text-center">

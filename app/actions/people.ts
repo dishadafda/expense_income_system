@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getServerAuthSession } from "@/lib/auth";
 
 export async function createPeople(formData: FormData, userId: number) {
   const name = String(formData.get("name") || "").trim();
@@ -47,6 +48,11 @@ export async function togglePeopleActive(id: number, isActive: boolean) {
 }
 
 export async function updatePeople(id: number, formData: FormData) {
+  const session = await getServerAuthSession();
+  if ((session?.user as any)?.role !== "ADMIN") {
+    throw new Error("Unauthorized: Only administrators can update people.");
+  }
+
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim();
   const mobile = String(formData.get("mobile") || "").trim();

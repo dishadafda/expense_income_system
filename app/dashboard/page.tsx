@@ -2,55 +2,110 @@ import { getCategories, getProjects, getPeople } from "@/app/actions/catalog";
 import { prisma } from "@/lib/prisma";
 import { getServerAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import LogoutButton from "../components/LogoutButton";
+import DashboardChart from "../components/DashboardChart";
+import AnalyticsCharts from "../components/AnalyticsCharts";
 
 export default async function DashboardPage() {
   const session = await getServerAuthSession();
   if (!session) redirect("/login");
-  
+
   const role = (session?.user as any)?.role as "ADMIN" | "USER";
   const userId = Number((session?.user as any)?.userId || 0);
+  const peopleId = Number((session?.user as any)?.peopleId || 0);
+  const parentUserId = Number((session?.user as any)?.parentUserId || 0);
   const userName = session?.user?.name || "";
   const isAdmin = role === "ADMIN";
 
-  // Data fetching based on role
-  const whereClause = isAdmin ? {} : { UserID: userId };
-  
-  const [categories, projects, people, expenseData, incomeData] = await Promise.all([
-    getCategories(role, userId),
-    getProjects(role),
-    getPeople(role, userId),
-    prisma.expenses.findMany({ where: whereClause, select: { Amount: true, ExpenseDate: true } }),
-    prisma.incomes.findMany({ where: whereClause, select: { Amount: true, IncomeDate: true } }),
-  ]);
+  const expenseWhere = isAdmin ? {} : { PeopleID: peopleId };
+  const incomeWhere = isAdmin ? {} : { PeopleID: peopleId };
 
-  const totalExpense = expenseData.reduce((sum, e) => sum + Number(e.Amount), 0);
-  const totalIncome = incomeData.reduce((sum, i) => sum + Number(i.Amount), 0);
+  const [categories, projects, people, expenseData, incomeData] =
+    await Promise.all([
+      getCategories(role, parentUserId),
+      getProjects(role, parentUserId),
+      getPeople(role, parentUserId),
+      prisma.expenses.findMany({
+        where: expenseWhere,
+        select: { Amount: true, ExpenseDate: true, CategoryID: true, ProjectID: true },
+      }),
+      prisma.incomes.findMany({
+        where: incomeWhere,
+        select: { Amount: true, IncomeDate: true, CategoryID: true, ProjectID: true },
+      }),
+    ]);
+
+  const totalExpense = expenseData.reduce(
+    (sum, e) => sum + Number(e.Amount),
+    0,
+  );
+  const totalIncome = incomeData.reduce(
+    (sum, i) => sum + Number(i.Amount),
+    0,
+  );
   const netWorth = totalIncome - totalExpense;
 
-  // Group data by month for dynamic chart (Last 6 Months)
-  const chartData = Array.from({ length: 6 }).map((_, i) => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - (5 - i));
-    const month = d.getMonth();
-    const year = d.getFullYear();
-    
-    const mExpenses = expenseData.filter(e => e.ExpenseDate.getMonth() === month && e.ExpenseDate.getFullYear() === year).reduce((sum, e) => sum + Number(e.Amount), 0);
-    const mIncomes = incomeData.filter(i => i.IncomeDate.getMonth() === month && i.IncomeDate.getFullYear() === year).reduce((sum, i) => sum + Number(i.Amount), 0);
-    
-    return { label: d.toLocaleString('default', { month: 'short' }), expense: mExpenses, income: mIncomes };
+  const incomesForChart = incomeData.map((i) => ({
+    amount: Number(i.Amount),
+    date: i.IncomeDate.toISOString(),
+  }));
+
+  const expensesForChart = expenseData.map((e) => ({
+    amount: Number(e.Amount),
+    date: e.ExpenseDate.toISOString(),
+  }));
+
+  // Aggregation for Category Pie Chart
+  const categoryDataMap: Record<number, number> = {};
+  expenseData.forEach((e) => {
+    if (e.CategoryID) {
+      categoryDataMap[e.CategoryID] = (categoryDataMap[e.CategoryID] || 0) + Number(e.Amount);
+    }
+  });
+  
+  const categoryChartData = Object.entries(categoryDataMap)
+    .map(([id, val]) => {
+      const cat = categories.find((c) => c.CategoryID === Number(id));
+      return { name: cat ? cat.CategoryName : "Unknown", value: val };
+    })
+    .sort((a, b) => b.value - a.value); // Sort highest expenses first
+
+  // Aggregation for Project Bar Chart
+  const projectDataMap: Record<number, { income: number; expense: number }> = {};
+  
+  incomeData.forEach((i) => {
+    if (i.ProjectID) {
+      if (!projectDataMap[i.ProjectID]) projectDataMap[i.ProjectID] = { income: 0, expense: 0 };
+      projectDataMap[i.ProjectID].income += Number(i.Amount);
+    }
+  });
+  
+  expenseData.forEach((e) => {
+    if (e.ProjectID) {
+      if (!projectDataMap[e.ProjectID]) projectDataMap[e.ProjectID] = { income: 0, expense: 0 };
+      projectDataMap[e.ProjectID].expense += Number(e.Amount);
+    }
   });
 
-  const maxChartVal = Math.max(...chartData.map(d => Math.max(d.expense, d.income)), 1);
+  const projectChartData = Object.entries(projectDataMap).map(([id, data]) => {
+    const proj = projects.find((p) => p.ProjectID === Number(id));
+    return { name: proj ? proj.ProjectName : "Unknown", income: data.income, expense: data.expense };
+  });
 
   return (
     <div>
-      <div className="d-flex justify-content-between align-items-center mb-5">
-        <div>
-          <h1 className="h3 fw-bold mb-1">{isAdmin ? "Admin Dashboard" : "User Dashboard"}</h1>
-          <p className="text-muted mb-0">Hello, {userName}. Welcome back!</p>
-        </div>
-        <LogoutButton />
+      <div 
+        className="mb-5 p-4 rounded-4 shadow-sm" 
+        style={{ 
+          background: "linear-gradient(135deg, #4f46e5 0%, #0ea5e9 100%)", 
+          color: "white" 
+        }}
+      >
+        <h1 className="display-6 fw-bold mb-2">
+          {isAdmin ? userName : "User Dashboard"}
+        </h1>
+        <p className="fs-5 mb-0" style={{ opacity: 0.9 }}>
+          Hello, {userName}. Welcome back! Let's track your finances today.
+        </p>
       </div>
 
       <div className="row g-4 mb-5">
@@ -91,26 +146,15 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="row g-4">
-        <div className="col-md-8">
-          <div className="card shadow-sm p-4" style={{ minHeight: '300px' }}>
-            <h6 className="fw-bold mb-4">6-Month Trend: Income vs Expenses</h6>
-            <div className="d-flex align-items-end gap-3 h-100 justify-content-around px-2 pt-4">
-              {chartData.map((data, i) => {
-                const incHeight = (data.income / maxChartVal) * 100;
-                const expHeight = (data.expense / maxChartVal) * 100;
-                return (
-                  <div key={i} className="d-flex flex-column align-items-center justify-content-end h-100 w-100">
-                    <div className="d-flex align-items-end gap-1 w-100 justify-content-center" style={{ height: '200px' }}>
-                      <div className="bg-success rounded-top" style={{ height: `${incHeight}%`, width: '20px', opacity: 0.8 }} title={`Income: ₹${data.income}`}></div>
-                      <div className="bg-danger rounded-top" style={{ height: `${expHeight}%`, width: '20px', opacity: 0.8 }} title={`Expense: ₹${data.expense}`}></div>
-                    </div>
-                    <small className="text-muted mt-2 fw-bold">{data.label}</small>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+      <div className="row g-4 mb-4">
+        <div className="col-md-12">
+          <DashboardChart incomes={incomesForChart} expenses={expensesForChart} />
+        </div>
+      </div>
+
+      <div className="row g-4 mb-5">
+        <div className="col-md-12">
+          <AnalyticsCharts categoryData={categoryChartData} projectData={projectChartData} />
         </div>
       </div>
     </div>

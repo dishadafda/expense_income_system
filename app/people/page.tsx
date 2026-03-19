@@ -3,11 +3,16 @@ import {
   createPeople,
   deletePeople,
   togglePeopleActive,
+  updatePeople,
 } from "@/app/actions/people";
 import { getServerAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import Link from "next/link";
 
-export default async function PeoplePage() {
+export default async function PeoplePage(props: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const searchParams = await props.searchParams;
   const session = await getServerAuthSession();
   const role = (session?.user as any)?.role as "ADMIN" | "USER" | undefined;
   const userId = Number((session?.user as any)?.userId || 0);
@@ -28,6 +33,9 @@ export default async function PeoplePage() {
     },
     orderBy: [{ PeopleName: "asc" }],
   });
+
+  const editId = searchParams?.edit ? Number(searchParams.edit) : null;
+  const editingPerson = editId ? people.find((p) => p.PeopleID === editId) : null;
 
   async function handleCreate(formData: FormData) {
     "use server";
@@ -58,8 +66,8 @@ export default async function PeoplePage() {
 
       <div className="card shadow-sm mb-4">
         <div className="card-body">
-          <h2 className="h6 mb-3">Add Person</h2>
-          <form action={handleCreate} className="row g-3">
+          <h2 className="h6 mb-3">{editingPerson ? "Edit Person" : "Add Person"}</h2>
+          <form action={editingPerson ? updatePeople.bind(null, editingPerson.PeopleID) : handleCreate} className="row g-3">
             <div className="col-md-3">
               <label className="form-label" htmlFor="name">
                 Name <span className="text-danger">*</span>
@@ -69,6 +77,7 @@ export default async function PeoplePage() {
                 name="name"
                 className="form-control"
                 required
+                defaultValue={editingPerson?.PeopleName || ""}
               />
             </div>
             <div className="col-md-3">
@@ -81,6 +90,7 @@ export default async function PeoplePage() {
                 type="email"
                 className="form-control"
                 required
+                defaultValue={editingPerson?.Email || ""}
               />
             </div>
             <div className="col-md-3">
@@ -92,6 +102,7 @@ export default async function PeoplePage() {
                 name="mobile"
                 className="form-control"
                 required
+                defaultValue={editingPerson?.MobileNo || ""}
               />
             </div>
             <div className="col-md-3">
@@ -104,13 +115,14 @@ export default async function PeoplePage() {
                 type="password"
                 className="form-control"
                 required
+                defaultValue={editingPerson?.Password || ""}
               />
             </div>
             <div className="col-md-3">
               <label className="form-label" htmlFor="code">
                 People Code
               </label>
-              <input id="code" name="code" className="form-control" />
+              <input id="code" name="code" className="form-control" defaultValue={editingPerson?.PeopleCode || ""} />
             </div>
             <div className="col-md-9">
               <label className="form-label" htmlFor="description">
@@ -120,11 +132,15 @@ export default async function PeoplePage() {
                 id="description"
                 name="description"
                 className="form-control"
+                defaultValue={editingPerson?.Description || ""}
               />
             </div>
-            <div className="col-12 d-flex justify-content-end">
+            <div className="col-12 d-flex justify-content-end gap-2">
+              {editingPerson && (
+                <Link href="/people" className="btn btn-secondary">Cancel</Link>
+              )}
               <button type="submit" className="btn btn-primary">
-                Save Person
+                {editingPerson ? "Update Person" : "Save Person"}
               </button>
             </div>
           </form>
@@ -141,8 +157,9 @@ export default async function PeoplePage() {
                 <th scope="col">Email</th>
                 <th scope="col">Mobile</th>
                 <th scope="col">Code</th>
+                <th scope="col">Password</th>
                 <th scope="col">Active</th>
-                <th scope="col">Actions</th>
+                <th scope="col" className="text-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -153,6 +170,7 @@ export default async function PeoplePage() {
                   <td>{p.Email}</td>
                   <td>{p.MobileNo}</td>
                   <td>{p.PeopleCode || "-"}</td>
+                  <td>{p.Password}</td>
                   <td>
                     {p.IsActive ? (
                       <span className="badge bg-success">Active</span>
@@ -162,6 +180,7 @@ export default async function PeoplePage() {
                   </td>
                   <td>
                     <div className="d-flex gap-2">
+                      <Link href={`/people?edit=${p.PeopleID}`} className="btn btn-sm btn-outline-primary">Edit</Link>
                       <form action={handleToggleActive}>
                         <input type="hidden" name="id" value={p.PeopleID} />
                         <input
@@ -173,7 +192,7 @@ export default async function PeoplePage() {
                           type="submit"
                           className={`btn btn-sm ${
                             p.IsActive
-                              ? "btn-outline-warning"
+                              ? "btn-outline-secondary"
                               : "btn-outline-success"
                           }`}
                         >
@@ -195,7 +214,7 @@ export default async function PeoplePage() {
               ))}
               {people.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-center text-muted">
+                  <td colSpan={8} className="text-center text-muted">
                     No people found.
                   </td>
                 </tr>

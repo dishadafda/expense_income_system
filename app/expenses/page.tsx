@@ -4,45 +4,65 @@ import {
   getSubCategories,
   getPeople,
 } from "@/app/actions/catalog";
-import { prisma } from "@/lib/prisma";
+import { createExpense, updateExpense, deleteExpense } from "@/app/actions/expenses";
 import { getServerAuthSession } from "@/lib/auth";
-import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
+import Link from "next/link";
+import ExportButtons from "@/app/components/ExportButtons";
 
 export default async function ExpensesPage({
   searchParams,
 }: {
-  searchParams: { categoryId?: string; projectId?: string };
+  // Updated type to support both Next.js 14 and 15 (Promise-based searchParams)
+  searchParams: Promise<{ categoryId?: string; projectId?: string; peopleId?: string; edit?: string }> | { categoryId?: string; projectId?: string; peopleId?: string; edit?: string };
 }) {
   const session = await getServerAuthSession();
-  const userId = Number((session?.user as any)?.userId || 0);
   const role = (session?.user as any)?.role as "ADMIN" | "USER" | undefined;
+  const peopleId = Number((session?.user as any)?.peopleId || 0);
+  const parentUserId = Number((session?.user as any)?.parentUserId || 0);
   const isAdmin = role === "ADMIN";
 
-  if (!userId) {
+  if (!role || (!isAdmin && (!peopleId || !parentUserId))) {
     return <div className="alert alert-danger">Not authorized.</div>;
   }
 
-  // Build where clause based on role and filters
-  const whereClause: any = {};
-  if (!isAdmin) {
-    // Normal users only see their own expenses
-    whereClause.UserID = userId;
+  // Await searchParams to prevent Next.js 15 bugs where params evaluate to undefined
+  const resolvedParams = await searchParams;
+  const filterCategoryId = resolvedParams?.categoryId;
+  const filterProjectId = resolvedParams?.projectId;
+  const filterPeopleId = resolvedParams?.peopleId;
+
+  // Build the dynamic where clause perfectly tailored for the current role
+  const expenseWhere: any = {};
+  
+  if (isAdmin) {
+    // Admin only sees expenses tied to their system
+    expenseWhere.UserID = parentUserId;
+    // Admin can filter by specific employee
+    if (filterPeopleId) {
+      expenseWhere.PeopleID = Number(filterPeopleId);
+    }
+  } else {
+    // Normal users strictly only see their own expenses
+    expenseWhere.PeopleID = peopleId;
   }
-  if (searchParams.categoryId) {
-    whereClause.CategoryID = Number(searchParams.categoryId);
+
+  // Apply Category and Project filters
+  if (filterCategoryId) {
+    expenseWhere.CategoryID = Number(filterCategoryId);
   }
-  if (searchParams.projectId) {
-    whereClause.ProjectID = Number(searchParams.projectId);
+  if (filterProjectId) {
+    expenseWhere.ProjectID = Number(filterProjectId);
   }
 
   const [categories, subCategories, projects, people, expenses] =
     await Promise.all([
-      getCategories(),
-      getSubCategories(),
-      getProjects(),
-      getPeople(),
+      getCategories(role, parentUserId),
+      getSubCategories(role, parentUserId),
+      getProjects(role, parentUserId),
+      getPeople(role, parentUserId),
       prisma.expenses.findMany({
-        where: whereClause,
+        where: expenseWhere,
         include: {
           categories: true,
           sub_categories: true,
@@ -57,45 +77,24 @@ export default async function ExpensesPage({
   const expenseCategories = categories.filter((c) => c.IsExpense);
   const expenseSubCategories = subCategories.filter((s) => s.IsExpense);
 
-  async function addExpense(formData: FormData) {
-    "use server";
+  const editId = resolvedParams?.edit ? Number(resolvedParams.edit) : null;
+  const editingExpense = editId ? expenses.find((e) => e.ExpenseID === editId) : null;
 
-    const sessionInner = await getServerAuthSession();
-    const userIdInner = Number((sessionInner?.user as any)?.userId || 0);
-    if (!userIdInner) return;
+  const formatDateForInput = (dateObject?: Date | null) => {
+    if (!dateObject) return "";
+    return new Date(dateObject).toISOString().split('T')[0];
+  };
 
-    const dateStr = String(formData.get("date") || "");
-    const amountStr = String(formData.get("amount") || "");
-    const categoryIdStr = String(formData.get("categoryId") || "");
-    const subCategoryIdStr = String(formData.get("subCategoryId") || "");
-    const peopleIdStr = String(formData.get("peopleId") || "");
-    const projectIdStr = String(formData.get("projectId") || "");
-    const detail = String(formData.get("detail") || "").trim();
-    const description = String(formData.get("description") || "").trim();
-
-    if (!dateStr || !amountStr || !peopleIdStr) {
-      return;
-    }
-
-    const amount = parseFloat(amountStr);
-    const date = new Date(dateStr);
-
-    await prisma.expenses.create({
-      data: {
-        ExpenseDate: date,
-        Amount: amount,
-        CategoryID: categoryIdStr ? Number(categoryIdStr) : null,
-        SubCategoryID: subCategoryIdStr ? Number(subCategoryIdStr) : null,
-        PeopleID: Number(peopleIdStr),
-        ProjectID: projectIdStr ? Number(projectIdStr) : null,
-        ExpenseDetail: detail || null,
-        Description: description || null,
-        UserID: userIdInner,
-      },
-    });
-
-    revalidatePath("/expenses");
-  }
+  const exportData = expenses.map(e => ({
+    "Date": e.ExpenseDate.toISOString().slice(0, 10),
+    "Category": e.categories?.CategoryName || "-",
+    "Sub Category": e.sub_categories?.SubCategoryName || "-",
+    ...(isAdmin ? { "People": e.peoples?.PeopleName || "-" } : {}),
+    "Project": e.projects?.ProjectName || "-",
+    "Amount": Number(e.Amount).toFixed(2),
+    "Detail": e.ExpenseDetail || "-",
+    "Description": e.Description || "-",
+  }));
 
   return (
     <div>
@@ -106,7 +105,7 @@ export default async function ExpensesPage({
           <div className="card-body">
             <h2 className="h6 mb-3">Filter Expenses</h2>
             <form method="get" className="row g-3">
-              <div className="col-md-4">
+              <div className="col-md-3">
                 <label className="form-label" htmlFor="filterCategoryId">
                   Filter by Category
                 </label>
@@ -114,7 +113,7 @@ export default async function ExpensesPage({
                   id="filterCategoryId"
                   name="categoryId"
                   className="form-select"
-                  defaultValue={searchParams.categoryId || ""}
+                  defaultValue={filterCategoryId || ""}
                 >
                   <option value="">All Categories</option>
                   {expenseCategories.map((c) => (
@@ -124,7 +123,7 @@ export default async function ExpensesPage({
                   ))}
                 </select>
               </div>
-              <div className="col-md-4">
+              <div className="col-md-3">
                 <label className="form-label" htmlFor="filterProjectId">
                   Filter by Project
                 </label>
@@ -132,7 +131,7 @@ export default async function ExpensesPage({
                   id="filterProjectId"
                   name="projectId"
                   className="form-select"
-                  defaultValue={searchParams.projectId || ""}
+                  defaultValue={filterProjectId || ""}
                 >
                   <option value="">All Projects</option>
                   {projects.map((p) => (
@@ -142,11 +141,11 @@ export default async function ExpensesPage({
                   ))}
                 </select>
               </div>
-              <div className="col-md-4 d-flex align-items-end">
-                <button type="submit" className="btn btn-primary me-2">
+              <div className="col-md-3 d-flex align-items-end gap-2">
+                <button type="submit" className="btn btn-primary flex-grow-1">
                   Apply Filters
                 </button>
-                <a href="/expenses" className="btn btn-outline-secondary">
+                <a href="/expenses" className="btn btn-outline-secondary flex-grow-1">
                   Clear
                 </a>
               </div>
@@ -158,8 +157,8 @@ export default async function ExpensesPage({
       {!isAdmin && (
         <div className="card shadow-sm mb-4">
           <div className="card-body">
-            <h2 className="h6 mb-3">Add Expense</h2>
-            <form action={addExpense} className="row g-3">
+            <h2 className="h6 mb-3">{editingExpense ? "Edit Expense" : "Add Expense"}</h2>
+            <form action={editingExpense ? updateExpense.bind(null, editingExpense.ExpenseID) : createExpense} className="row g-3">
             <div className="col-md-3">
               <label className="form-label" htmlFor="date">
                 Date
@@ -170,6 +169,7 @@ export default async function ExpensesPage({
                 type="date"
                 className="form-control"
                 required
+                defaultValue={formatDateForInput(editingExpense?.ExpenseDate)}
               />
             </div>
             <div className="col-md-3">
@@ -184,6 +184,7 @@ export default async function ExpensesPage({
                 min="0"
                 className="form-control"
                 required
+                defaultValue={editingExpense ? Number(editingExpense.Amount).toString() : ""}
               />
             </div>
             <div className="col-md-3">
@@ -194,6 +195,7 @@ export default async function ExpensesPage({
                 id="categoryId"
                 name="categoryId"
                 className="form-select"
+                defaultValue={editingExpense?.CategoryID || ""}
               >
                 <option value="">Select</option>
                 {expenseCategories.map((c) => (
@@ -211,6 +213,7 @@ export default async function ExpensesPage({
                 id="subCategoryId"
                 name="subCategoryId"
                 className="form-select"
+                defaultValue={editingExpense?.SubCategoryID || ""}
               >
                 <option value="">Select</option>
                 {expenseSubCategories.map((s) => (
@@ -228,6 +231,7 @@ export default async function ExpensesPage({
                 id="projectId"
                 name="projectId"
                 className="form-select"
+                defaultValue={editingExpense?.ProjectID || ""}
               >
                 <option value="">Select</option>
                 {projects.map((p) => (
@@ -241,7 +245,7 @@ export default async function ExpensesPage({
               <label className="form-label" htmlFor="detail">
                 Detail
               </label>
-              <input id="detail" name="detail" className="form-control" />
+              <input id="detail" name="detail" className="form-control" defaultValue={editingExpense?.ExpenseDetail || ""} />
             </div>
             <div className="col-md-6">
               <label className="form-label" htmlFor="description">
@@ -251,11 +255,27 @@ export default async function ExpensesPage({
                 id="description"
                 name="description"
                 className="form-control"
+                defaultValue={editingExpense?.Description || ""}
               />
             </div>
-            <div className="col-12 d-flex justify-content-end">
+            <div className="col-md-12">
+              <label className="form-label" htmlFor="attachment">
+                Receipt / Bill (Optional) {editingExpense?.AttachmentPath && <a href={editingExpense.AttachmentPath} target="_blank" className="ms-2 text-primary fs-6">View Current</a>}
+              </label>
+              <input
+                id="attachment"
+                name="attachment"
+                type="file"
+                className="form-control"
+                accept="image/*,.pdf"
+              />
+            </div>
+            <div className="col-12 d-flex justify-content-end gap-2">
+              {editingExpense && (
+                <Link href="/expenses" className="btn btn-secondary">Cancel</Link>
+              )}
               <button type="submit" className="btn btn-primary">
-                Save Expense
+                {editingExpense ? "Update Expense" : "Save Expense"}
               </button>
             </div>
           </form>
@@ -265,7 +285,10 @@ export default async function ExpensesPage({
 
       <div className="card shadow-sm">
         <div className="card-body">
-          <h2 className="h6 mb-3">Recent Expenses</h2>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h2 className="h6 mb-0">Recent Expenses</h2>
+            <ExportButtons data={exportData} filename="Expenses_Report" />
+          </div>
           <table className="table table-striped table-hover mb-0">
             <thead>
               <tr>
@@ -274,9 +297,11 @@ export default async function ExpensesPage({
                 <th scope="col">Sub Category</th>
                 {isAdmin && <th scope="col">People</th>}
                 <th scope="col">Project</th>
+                <th scope="col" className="text-center">Receipt</th>
                 <th scope="col" className="text-end">
                   Amount
                 </th>
+                {!isAdmin && <th scope="col" className="text-end">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -287,14 +312,31 @@ export default async function ExpensesPage({
                   <td>{e.sub_categories?.SubCategoryName || "-"}</td>
                   {isAdmin && <td>{e.peoples?.PeopleName || "-"}</td>}
                   <td>{e.projects?.ProjectName || "-"}</td>
+                  <td className="text-center">
+                    {e.AttachmentPath ? (
+                      <a href={e.AttachmentPath} target="_blank" className="text-decoration-none">
+                        📎 View
+                      </a>
+                    ) : "-"}
+                  </td>
                   <td className="text-end">
                     ₹ {Number(e.Amount).toFixed(2)}
                   </td>
+                  {!isAdmin && (
+                    <td className="text-end">
+                      <div className="d-flex justify-content-end gap-2">
+                        <Link href={`/expenses?edit=${e.ExpenseID}`} className="btn btn-sm btn-outline-primary">Edit</Link>
+                        <form action={async () => { "use server"; await deleteExpense(e.ExpenseID); }}>
+                          <button type="submit" className="btn btn-sm btn-outline-danger">Delete</button>
+                        </form>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
               {expenses.length === 0 && (
                 <tr>
-                  <td colSpan={isAdmin ? 6 : 5} className="text-center text-muted">
+                  <td colSpan={isAdmin ? 7 : 8} className="text-center text-muted">
                     No expenses found.
                   </td>
                 </tr>
@@ -306,4 +348,3 @@ export default async function ExpensesPage({
     </div>
   );
 }
-

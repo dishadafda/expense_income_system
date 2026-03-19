@@ -1,14 +1,20 @@
 import { getCategories } from "@/app/actions/catalog";
-import { createCategory, deleteCategory } from "@/app/actions/categories";
+import { createCategory, deleteCategory, updateCategory } from "@/app/actions/categories";
+import Link from "next/link";
 import { getServerAuthSession } from "@/lib/auth";
 
-export default async function CategoriesPage() {
+export default async function CategoriesPage(props: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const searchParams = await props.searchParams;
   const session = await getServerAuthSession();
   const role = (session?.user as any)?.role as "ADMIN" | "USER";
-  const userId = Number((session?.user as any)?.userId || 0);
+  const parentUserId = Number((session?.user as any)?.parentUserId || (session?.user as any)?.userId || 0);
   const isUser = role === "USER";
 
-  const categories = await getCategories(role, userId);
+  const categories = await getCategories(role, parentUserId);
+  const editId = searchParams?.edit ? Number(searchParams.edit) : null;
+  const editingCategory = editId ? categories.find((c) => c.CategoryID === editId) : null;
 
   async function handleCreate(formData: FormData) {
     "use server";
@@ -23,24 +29,41 @@ export default async function CategoriesPage() {
       {isUser && (
         <div className="card shadow-sm mb-4">
           <div className="card-body">
-            <h2 className="h6 mb-3">Add Category</h2>
-            <form action={handleCreate} className="row g-3 align-items-end">
-              <div className="col-md-4">
+            <h2 className="h6 mb-3">{editingCategory ? "Edit Category" : "Add Category"}</h2>
+            <form action={editingCategory ? updateCategory.bind(null, editingCategory.CategoryID) : handleCreate} className="row g-3 align-items-end">
+              <div className="col-md-5">
                 <label className="form-label" htmlFor="name">Name</label>
-                <input id="name" name="name" className="form-control" required />
+                <input id="name" name="name" className="form-control" required defaultValue={editingCategory?.CategoryName || ""} />
               </div>
-              <div className="col-md-3">
+              <div className="col-md-5">
+                <label className="form-label" htmlFor="logoPath">Logo Path</label>
+                <input id="logoPath" name="logoPath" className="form-control" maxLength={250} defaultValue={editingCategory?.LogoPath || ""} />
+              </div>
+              <div className="col-md-2">
                 <div className="form-check">
-                  <input id="isExpense" name="isExpense" type="checkbox" className="form-check-input" defaultChecked />
+                  <input id="isExpense" name="isExpense" type="checkbox" className="form-check-input" defaultChecked={editingCategory ? editingCategory.IsExpense : true} />
                   <label className="form-check-label">Expense</label>
                 </div>
                 <div className="form-check">
-                  <input id="isIncome" name="isIncome" type="checkbox" className="form-check-input" />
+                  <input id="isIncome" name="isIncome" type="checkbox" className="form-check-input" defaultChecked={editingCategory ? editingCategory.IsIncome : false} />
                   <label className="form-check-label">Income</label>
                 </div>
+                {editingCategory && (
+                  <div className="form-check mt-2">
+                    <input id="isActive" name="isActive" type="checkbox" className="form-check-input" defaultChecked={editingCategory.IsActive} />
+                    <label className="form-check-label text-warning">Active</label>
+                  </div>
+                )}
               </div>
-              <div className="col-md-2">
-                <button type="submit" className="btn btn-primary w-100">Save</button>
+              <div className="col-md-9">
+                <label className="form-label" htmlFor="description">Description</label>
+                <input id="description" name="description" className="form-control" maxLength={500} defaultValue={editingCategory?.Description || ""} />
+              </div>
+              <div className="col-md-3 d-flex gap-2 justify-content-end align-items-end">
+                {editingCategory && (
+                  <Link href="/categories" className="btn btn-secondary w-100">Cancel</Link>
+                )}
+                <button type="submit" className="btn btn-primary w-100">{editingCategory ? "Update" : "Save"}</button>
               </div>
             </form>
           </div>
@@ -64,9 +87,12 @@ export default async function CategoriesPage() {
                   <td>{c.IsActive ? "Yes" : "No"}</td>
                   {isUser && (
                     <td>
-                      <form action={async () => { "use server"; await deleteCategory(c.CategoryID); }}>
-                        <button type="submit" className="btn btn-sm btn-outline-danger">Delete</button>
-                      </form>
+                      <div className="d-flex gap-2">
+                        <Link href={`/categories?edit=${c.CategoryID}`} className="btn btn-sm btn-outline-primary">Edit</Link>
+                        <form action={async () => { "use server"; await deleteCategory(c.CategoryID); }}>
+                          <button type="submit" className="btn btn-sm btn-outline-danger">Delete</button>
+                        </form>
+                      </div>
                     </td>
                   )}
                 </tr>

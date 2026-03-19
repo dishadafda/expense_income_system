@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getServerAuthSession } from "@/lib/auth";
+import { uploadFile } from "@/lib/upload";
 
 /** * Action to Delete Income 
  * Strictly restricted to ADMIN role
@@ -39,6 +40,14 @@ export async function updateIncome(id: number, formData: FormData) {
   const amount = parseFloat(String(formData.get("amount")));
   const date = new Date(String(formData.get("date")));
 
+  const file = formData.get("attachment") as File | null;
+  
+  const existingIncome = await prisma.incomes.findUnique({ where: { IncomeID: id } });
+  let attachmentPath = existingIncome?.AttachmentPath || null;
+  if (file && file.size > 0) {
+    attachmentPath = await uploadFile(file);
+  }
+
   await prisma.incomes.update({
     where: { IncomeID: id },
     data: {
@@ -49,6 +58,7 @@ export async function updateIncome(id: number, formData: FormData) {
       PeopleID: Number(formData.get("peopleId")),
       ProjectID: Number(formData.get("projectId")) || null,
       IncomeDetail: String(formData.get("detail")).trim() || null,
+      AttachmentPath: attachmentPath,
       Description: String(formData.get("description")).trim() || null,
     },
   });

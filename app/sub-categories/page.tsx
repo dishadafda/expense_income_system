@@ -2,27 +2,33 @@ import { getCategories, getSubCategories } from "@/app/actions/catalog";
 import {
   createSubCategory,
   deleteSubCategory,
+  updateSubCategory,
 } from "@/app/actions/subcategories";
 import { getServerAuthSession } from "@/lib/auth";
+import Link from "next/link";
 
-export default async function SubCategoriesPage() {
+export default async function SubCategoriesPage(props: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const searchParams = await props.searchParams;
   const session = await getServerAuthSession();
   const role = (session?.user as any)?.role as "ADMIN" | "USER";
-  const userId = Number((session?.user as any)?.userId || 0);
+  const parentUserId = Number((session?.user as any)?.parentUserId || (session?.user as any)?.userId || 0);
 
   const isUser = role === "USER";
   const isAdmin = role === "ADMIN";
 
-  // Fetch data using the catalog methods which handle role-based filtering automatically
   const [categories, subCategories] = await Promise.all([
-    getCategories(role, userId),
-    getSubCategories(role, userId),
+    getCategories(role, parentUserId),
+    getSubCategories(role, parentUserId),
   ]);
+
+  const editId = searchParams?.edit ? Number(searchParams.edit) : null;
+  const editingSubCategory = editId ? subCategories.find((s) => s.SubCategoryID === editId) : null;
 
   async function handleCreate(formData: FormData) {
     "use server";
-    // Only users can execute this action
-    if (!isUser || !userId) return;
+    if (!isUser || !parentUserId) return;
     await createSubCategory(formData);
   }
 
@@ -45,9 +51,9 @@ export default async function SubCategoriesPage() {
       {isUser && (
         <div className="card shadow-sm mb-4">
           <div className="card-body">
-            <h2 className="h6 mb-3">Add Sub-Category</h2>
-            <form action={handleCreate} className="row g-3 align-items-end">
-              <div className="col-md-4">
+            <h2 className="h6 mb-3">{editingSubCategory ? "Edit Sub-Category" : "Add Sub-Category"}</h2>
+            <form action={editingSubCategory ? updateSubCategory.bind(null, editingSubCategory.SubCategoryID) : handleCreate} className="row g-3 align-items-end">
+              <div className="col-md-3">
                 <label className="form-label" htmlFor="categoryId">
                   Category <span className="text-danger">*</span>
                 </label>
@@ -56,6 +62,7 @@ export default async function SubCategoriesPage() {
                   name="categoryId"
                   className="form-select"
                   required
+                  defaultValue={editingSubCategory?.CategoryID || ""}
                 >
                   <option value="">Select Category</option>
                   {categories.map((c) => (
@@ -74,7 +81,12 @@ export default async function SubCategoriesPage() {
                   name="name"
                   className="form-control"
                   required
+                  defaultValue={editingSubCategory?.SubCategoryName || ""}
                 />
+              </div>
+              <div className="col-md-3">
+                <label className="form-label" htmlFor="logoPath">Logo Path</label>
+                <input id="logoPath" name="logoPath" className="form-control" maxLength={250} defaultValue={editingSubCategory?.LogoPath || ""} />
               </div>
               <div className="col-md-2">
                 <div className="form-check">
@@ -83,7 +95,7 @@ export default async function SubCategoriesPage() {
                     name="isExpense"
                     type="checkbox"
                     className="form-check-input"
-                    defaultChecked
+                    defaultChecked={editingSubCategory ? editingSubCategory.IsExpense : true}
                   />
                   <label className="form-check-label" htmlFor="isExpense">
                     Expense
@@ -95,15 +107,37 @@ export default async function SubCategoriesPage() {
                     name="isIncome"
                     type="checkbox"
                     className="form-check-input"
+                    defaultChecked={editingSubCategory ? editingSubCategory.IsIncome : false}
                   />
                   <label className="form-check-label" htmlFor="isIncome">
                     Income
                   </label>
                 </div>
+                {editingSubCategory && (
+                  <div className="form-check mt-2">
+                    <input
+                      id="isActive"
+                      name="isActive"
+                      type="checkbox"
+                      className="form-check-input"
+                      defaultChecked={editingSubCategory.IsActive}
+                    />
+                    <label className="form-check-label text-warning" htmlFor="isActive">
+                      Active
+                    </label>
+                  </div>
+                )}
               </div>
-              <div className="col-md-2">
+              <div className="col-md-9">
+                <label className="form-label" htmlFor="description">Description</label>
+                <input id="description" name="description" className="form-control" maxLength={500} defaultValue={editingSubCategory?.Description || ""} />
+              </div>
+              <div className="col-md-3 d-flex gap-2 justify-content-end align-items-end">
+                {editingSubCategory && (
+                  <Link href="/sub-categories" className="btn btn-secondary w-100">Cancel</Link>
+                )}
                 <button type="submit" className="btn btn-primary w-100">
-                  Save
+                  {editingSubCategory ? "Update" : "Save"}
                 </button>
               </div>
             </form>
@@ -141,19 +175,22 @@ export default async function SubCategoriesPage() {
                   {/* ONLY RENDER THE DELETE BUTTON FOR USERS */}
                   {isUser && (
                     <td>
-                      <form action={handleDelete}>
-                        <input
-                          type="hidden"
-                          name="id"
-                          value={s.SubCategoryID}
-                        />
-                        <button
-                          type="submit"
-                          className="btn btn-sm btn-outline-danger"
-                        >
-                          Delete
-                        </button>
-                      </form>
+                      <div className="d-flex gap-2">
+                        <Link href={`/sub-categories?edit=${s.SubCategoryID}`} className="btn btn-sm btn-outline-primary">Edit</Link>
+                        <form action={handleDelete}>
+                          <input
+                            type="hidden"
+                            name="id"
+                            value={s.SubCategoryID}
+                          />
+                          <button
+                            type="submit"
+                            className="btn btn-sm btn-outline-danger"
+                          >
+                            Delete
+                          </button>
+                        </form>
+                      </div>
                     </td>
                   )}
                 </tr>
