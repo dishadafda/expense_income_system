@@ -68,8 +68,9 @@ export default async function ProjectsPage(props: {
       )}
 
       <div className="card shadow-sm">
-        <div className="card-body">
-          <table className="table table-striped table-hover mb-0">
+        <div className="card-body p-0">
+          <div className="table-responsive">
+            <table className="table table-striped table-hover align-middle text-nowrap mb-0">
             <thead>
               <tr>
                 <th>Name</th><th>Start Date</th><th>End Date</th>
@@ -105,6 +106,7 @@ export default async function ProjectsPage(props: {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </div>

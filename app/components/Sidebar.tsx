@@ -8,7 +8,7 @@ import LogoutButton from "./LogoutButton";
 export function Sidebar() {
   const pathname = usePathname();
 
-  if (pathname === "/login") return null;
+  if (pathname === "/login" || pathname === "/") return null;
 
   return (
     <aside

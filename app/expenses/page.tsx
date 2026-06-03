@@ -284,12 +284,13 @@ export default async function ExpensesPage({
       )}
 
       <div className="card shadow-sm">
-        <div className="card-body">
-          <div className="d-flex justify-content-between align-items-center mb-3">
+        <div className="card-body p-0">
+          <div className="d-flex justify-content-between align-items-center p-3 border-bottom">
             <h2 className="h6 mb-0">Recent Expenses</h2>
             <ExportButtons data={exportData} filename="Expenses_Report" />
           </div>
-          <table className="table table-striped table-hover mb-0">
+          <div className="table-responsive">
+            <table className="table table-striped table-hover align-middle text-nowrap mb-0">
             <thead>
               <tr>
                 <th scope="col">Date</th>
@@ -343,6 +344,7 @@ export default async function ExpensesPage({
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </div>
