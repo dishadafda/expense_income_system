@@ -110,7 +110,7 @@ export default async function IncomesPage(props: {
   }
 
   return (
-    <div>
+    <div className="app-page w-100">
       <h1 className="text-black h3 mb-4">Incomes Management</h1>
 
       {isAdmin && (

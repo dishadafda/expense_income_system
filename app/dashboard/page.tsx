@@ -92,7 +92,7 @@ export default async function DashboardPage() {
   });
 
   return (
-    <div>
+    <div className="app-page w-100">
       <div 
         className="mb-5 p-4 rounded-4 shadow-sm" 
         style={{ 

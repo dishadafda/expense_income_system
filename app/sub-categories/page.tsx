@@ -42,7 +42,7 @@ export default async function SubCategoriesPage(props: {
   }
 
   return (
-    <div>
+    <div className="app-page w-100">
       <h1 className="h3 mb-4 text-black">
         Sub-Categories {isAdmin && "(View Only)"}
       </h1>

@@ -98,14 +98,14 @@ export default function Home() {
                 <div className="d-flex justify-content-center mb-3">
                   <Image
                     src="/logo.jpg"
-                    alt="WealthWise"
+                    alt="CrashTracker"
                     width={80}
                     height={80}
                     className="rounded-3"
                   />
                 </div>
                 <h5 className="fw-bold" style={{ color: "var(--dark-blue)" }}>
-                  WealthWise Expense Manager
+                  CrashTracker Expense Manager
                 </h5>
                 <p className="text-muted small mb-0">
                   Simple, secure, and built for teams and individuals.

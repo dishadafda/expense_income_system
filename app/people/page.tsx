@@ -61,7 +61,7 @@ export default async function PeoplePage(props: {
   }
 
   return (
-    <div>
+    <div className="app-page w-100">
       <h1 className="h3 mb-4 text-black">People Management</h1>
 
       <div className="card shadow-sm mb-4">

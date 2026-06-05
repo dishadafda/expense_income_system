@@ -23,7 +23,7 @@ export default async function CategoriesPage(props: {
   }
 
   return (
-    <div>
+    <div className="app-page w-100">
       <h1 className="h3 mb-4 text-black">Categories {role === "ADMIN" && "(View Only)"}</h1>
 
       {isUser && (

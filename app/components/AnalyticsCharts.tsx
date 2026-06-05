@@ -31,19 +31,29 @@ export default function AnalyticsCharts({ categoryData, projectData }: Analytics
 
   if (!isMounted) return <div className="p-5 text-center text-muted">Loading charts...</div>;
 
+  const categoryTotal = categoryData.reduce((sum, d) => sum + d.value, 0);
+
   return (
     <div className="row g-4">
       {/* Category Pie Chart */}
       <div className="col-md-6">
-        <div className="card shadow-sm h-100">
-          <div className="card-body">
+        <div className="card shadow-sm h-100 overflow-visible">
+          <div className="card-body overflow-visible">
             <h5 className="card-title h6 mb-4">Expense Distribution by Category</h5>
             {categoryData.length === 0 ? (
               <p className="text-muted text-center my-5">No expense data available.</p>
             ) : (
-              <div style={{ width: "100%", height: 350 }}>
-                <ResponsiveContainer>
-                  <PieChart>
+              <div
+                style={{
+                  width: "100%",
+                  height: 380,
+                  minHeight: 380,
+                  overflow: "visible",
+                  padding: "8px 12px",
+                }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart margin={{ top: 16, right: 24, bottom: 8, left: 24 }}>
                     <Pie
                       data={categoryData}
                       cx="50%"
@@ -52,14 +62,58 @@ export default function AnalyticsCharts({ categoryData, projectData }: Analytics
                       outerRadius={120}
                       fill="#8884d8"
                       dataKey="value"
-                      label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                      nameKey="name"
+                      label={({ percent, x, y, textAnchor }) => (
+                        <text
+                          x={x}
+                          y={y}
+                          textAnchor={textAnchor}
+                          dominantBaseline="central"
+                          fill="#1e293b"
+                          fontSize={13}
+                          fontWeight={600}
+                        >
+                          {`${((percent || 0) * 100).toFixed(0)}%`}
+                        </text>
+                      )}
                     >
                       {categoryData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value: any) => `₹ ${Number(value).toLocaleString()}`} />
-                    <Legend />
+                    <Tooltip
+                      formatter={(value, _name, item) => [
+                        `₹ ${Number(value ?? 0).toLocaleString()}`,
+                        (item as { payload?: { name?: string } })?.payload?.name ?? "Category",
+                      ]}
+                    />
+                    <Legend
+                      layout="vertical"
+                      verticalAlign="bottom"
+                      align="center"
+                      wrapperStyle={{ paddingTop: 16, fontSize: 12, lineHeight: "1.6" }}
+                      content={() => (
+                        <ul className="list-unstyled mb-0 text-center small">
+                          {categoryData.map((entry, index) => (
+                            <li key={entry.name} className="mb-1">
+                              <span
+                                className="d-inline-block rounded-1 me-2 align-middle"
+                                style={{
+                                  width: 10,
+                                  height: 10,
+                                  backgroundColor: COLORS[index % COLORS.length],
+                                }}
+                              />
+                              {entry.name} —{" "}
+                              {categoryTotal > 0
+                                ? ((entry.value / categoryTotal) * 100).toFixed(0)
+                                : 0}
+                              %
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>

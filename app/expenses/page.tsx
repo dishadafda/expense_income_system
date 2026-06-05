@@ -97,7 +97,7 @@ export default async function ExpensesPage({
   }));
 
   return (
-    <div>
+    <div className="app-page w-100">
       <h1 className="h3 text-black mb-4">Expenses</h1>
 
       {isAdmin && (

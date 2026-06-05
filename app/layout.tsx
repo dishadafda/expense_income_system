@@ -1,24 +1,21 @@
 import type { Metadata } from "next";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./globals.css";
-import { Sidebar } from "./components/Sidebar";
+import { Providers } from "./components/Providers";
+import { AppShell } from "./components/AppShell";
 
 export const metadata: Metadata = {
-  title: "WealthWise | Expense Manager",
+  title: "CashTracker | Expense Manager",
   description: "Track expenses and incomes with style",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body>
-        <div className="d-flex min-vh-100">
-          <Sidebar />
-
-          <main className="flex-grow-1 overflow-auto">
-            <div className="container-fluid p-5">{children}</div>
-          </main>
-        </div>
+    <html lang="en" className="h-100">
+      <body className="h-100 m-0">
+        <Providers>
+          <AppShell>{children}</AppShell>
+        </Providers>
       </body>
     </html>
   );
